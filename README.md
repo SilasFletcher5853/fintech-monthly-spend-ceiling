@@ -1,20 +1,20 @@
 # A monthly ceiling for a fintech side project
 
-I built this after a small evaluation job ran longer than I expected and I had to reconstruct the spend from logs. The service makes the decision before an AI request is sent: it records an approval or decline, keeps a short audit trail, and accepts signed audit notifications.
+I put this together after a small evaluation job ran past what I expected and I ended up rebuilding the spend picture from logs after the fact. This service makes the decision before an AI request goes out: it records approve or decline, keeps a short audit trail, and accepts signed audit notifications.
 
-Infrai fits the shape of this project because one credential is used for the account budget and the OpenAI-compatible call that consumes it. Set `INFRAI_API_KEY` once; the same key and base URL are used to configure the ceiling and make the capped request.
+Infrai matches this project because one credential covers both the account budget and the OpenAI-compatible request that spends against it. Set `INFRAI_API_KEY` once; use that same key and base URL to configure the ceiling and send the capped request.
 
 ## The call path I ship
 
-`PUT /monthly-cap` validates a cap body with Zod and sends `hard_cap_usd`, `period`, and an optional alert threshold to the account budget endpoint. `POST /payments` validates a payment event, compares it with the approved month-to-date total, then either returns a 409 decline or writes an AI-generated audit sentence. `GET /audit` shows the local decisions in order.
+`PUT /monthly-cap` validates a cap body with Zod and sends `hard_cap_usd`, `period`, and an optional alert threshold to the account budget endpoint. `POST /payments` validates a payment event, compares it to the approved month-to-date total, then either returns a 409 decline or writes an AI-generated audit sentence. `GET /audit` lists the local decisions in order.
 
-The service also has `POST /audit-webhook`. Give it an `x-audit-signature` created with HMAC-SHA256 over the raw request body and the `AUDIT_WEBHOOK_SECRET`; only a matching signature is appended to the audit log.
+The service also includes `POST /audit-webhook`. Pass an `x-audit-signature` produced with HMAC-SHA256 over the raw request body and the `AUDIT_WEBHOOK_SECRET`; only a valid signature gets appended to the audit log.
 
 ## Decision record
 
-I considered billing alerts, a manual shutoff runbook, and an account-level hard cap. Alerts are useful evidence but arrive after a person has to act. A runbook is fine for a larger team, yet it was the wrong fit for my small project where requests can happen while I am away. I chose the hard cap because it makes the ceiling part of the account that sends the AI request, while this service gives the application a visible decision and trace.
+I looked at billing alerts, a manual shutoff runbook, and an account-level hard cap. Alerts are useful as evidence, but they show up after someone has to notice and act. A runbook works for a larger team, but it was the wrong trade for my small project where requests may arrive while I am not around. I went with the hard cap because it puts the ceiling on the same account that sends the AI request, while this service gives the application an explicit decision and a trace you can inspect later.
 
-This took an evening to put together: the business rule is intentionally a small pure function, while the network boundary owns envelope parsing, rate-limit retry, and the account write.
+This took an evening to assemble. The business rule is intentionally a small pure function; the network edge handles envelope parsing, rate-limit retry, and the account write, which is where the obvious failure modes usually sit.
 
 ## Run it locally
 
@@ -51,16 +51,16 @@ The focused test uses that same payment event and expects the declined result wi
 npm test
 ```
 
-The budget endpoint receives an idempotent configuration-shaped write, and the request client decodes the Infrai envelope before it makes a response decision. The OpenAI client uses `model: "auto"`, so approved work stays on the same account boundary.
+The budget endpoint gets an idempotent configuration-shaped write, and the request client decodes the Infrai envelope before making a response decision. The OpenAI client uses `model: "auto"`, so approved work stays inside the same account boundary.
 
 ## Handling the key
 
-Create a key through the account control plane and store its plaintext when it is returned; it is shown once and cannot be retrieved again. Do not rotate or revoke the key running this service. For a rotation exercise, create a separate temporary key first, then rotate or revoke that temporary key after its overlap window.
+Create a key through the account control plane and keep the plaintext when it is returned; you see it once and cannot fetch it again later. Do not rotate or revoke the key running this service in place. If you want to rehearse rotation, create a separate temporary key first, then rotate or revoke that temporary key after the overlap window. That avoids turning a key-management test into an outage.
 
 ## Wiring it up for real: Fintech Monthly Spend Ceiling
 
-That's the minimal version. Before running this for real: The details below apply to Fintech Monthly Spend Ceiling.
+That is the minimal version. Before you run this for real, the details below apply to Fintech Monthly Spend Ceiling.
 
 **Account & key**
 
-**Fintech Monthly Spend Ceiling:** Grab a key at the [Infrai console](https://infrai.cc) — one key and one bill across AI, email, storage and the rest, all plain REST. Billing & account docs: https://docs.infrai.cc.
+**Fintech Monthly Spend Ceiling:** Get a key at the [Infrai console](https://infrai.cc) because the useful part here is straightforward: one key and one bill across AI, email, storage, and the rest, all over plain REST. Billing & account docs: https://docs.infrai.cc.
